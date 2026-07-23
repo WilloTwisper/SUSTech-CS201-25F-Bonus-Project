@@ -1,0 +1,463 @@
+\documentclass[twocolumn, 10pt, a4paper]{article}
+
+% --- Packages ---
+\usepackage[utf8]{inputenc}
+\usepackage{geometry}
+\usepackage{fancyhdr} % Professional headers
+\usepackage{lastpage} 
+\usepackage{amsmath, amssymb, amsthm}
+\usepackage{graphicx}
+\usepackage{booktabs}
+\usepackage{algorithm}
+\usepackage{algpseudocode}
+\usepackage{hyperref}
+\usepackage{caption}
+\usepackage{subcaption}
+\usepackage{titlesec}
+\usepackage{enumitem}
+\usepackage{listings}
+\usepackage{xcolor}
+\usepackage{float} % To force figure placement
+
+% --- Geometry & Header Setup ---
+\geometry{left=1.5cm, right=1.5cm, top=2.5cm, bottom=2.5cm}
+
+% --- Code Style ---
+\definecolor{codegreen}{rgb}{0,0.6,0}
+\definecolor{codegray}{rgb}{0.5,0.5,0.5}
+\definecolor{backcolour}{rgb}{0.95,0.95,0.92}
+\lstdefinestyle{mystyle}{
+    backgroundcolor=\color{backcolour},   
+    commentstyle=\color{codegreen},
+    keywordstyle=\color{magenta},
+    numberstyle=\tiny\color{codegray},
+    basicstyle=\ttfamily\footnotesize,
+    breaklines=true,                 
+    captionpos=b,                    
+    keepspaces=true,                 
+    numbers=left,                    
+    numbersep=5pt,                  
+    tabsize=2
+}
+\lstset{style=mystyle}
+
+% --- Header/Footer Configuration ---
+\pagestyle{fancy}
+\fancyhf{} 
+\fancyhead[L]{\textit{Discrete Mathematics Project, 2025, SUSTech}} 
+\fancyhead[R]{\textit{Liu et al. $\cdot$ Topological Consistency \& Reconstruction}}
+\fancyfoot[C]{\thepage}
+
+\fancypagestyle{plain}{
+  \fancyhf{}
+  \fancyfoot[C]{\thepage}
+  \renewcommand{\headrulewidth}{0pt}
+}
+
+% --- Title Information ---
+\title{\textbf{Topological Consistency Verification and Adaptive Reconstruction in Medical Image Lattices: A Hybrid Discrete-Continuous Approach}}
+
+\author{\textbf{Jialiang Liu} \\
+\texttt{12412719@mail.sustech.edu.cn} \\
+\textit{Department of Computer Science and Engineering} \\
+\textit{Southern University of Science and Technology (SUSTech)} \\
+\textit{Shenzhen, China}}
+
+\date{}
+
+\begin{document}
+
+\twocolumn[
+  \begin{@twocolumnfalse}
+    \maketitle
+    \thispagestyle{plain}
+    \begin{abstract}
+      \noindent \textbf{Abstract.} Deep learning models for medical image segmentation often treat pixels as independent statistical variables, ignoring the global geometric constraints inherent in biological structures. This results in topological defects, particularly fractures in thin tissues, which violate the connectivity requirement ($b_0=1$) and impede downstream biomechanical analysis. In this project, we formulate the segmentation problem as a Grid Graph model ($G=(V, E)$) and present an iterative research framework to restore topological consistency. We begin with a \textbf{Topological Audit}, identifying the retinal layer (Class 6) as the most fragmented structure. We then evolve our methodology through three phases: (1) Discrete Graph Pruning (V1), (2) Fixed-Width Polynomial Reconstruction (V4), and (3) a final \textbf{Dual-Regression Hybrid Model (V5)}. By mapping discrete lattice points to a continuous function space for global trend extrapolation and adaptive caliber modeling, our final method achieves \textbf{100\% topological accuracy} while improving the Dice coefficient by \textbf{1.38\%}. This work demonstrates how integrating continuous mathematical modeling with discrete graph theory can solve structural problems that pure statistics cannot.
+      
+      \vspace{0.3cm}
+      \noindent \textbf{Keywords:} Discrete Mathematics $\cdot$ Graph Connectivity $\cdot$ Medical Image Segmentation $\cdot$ Lattice Theory $\cdot$ Dual Regression
+      \vspace{0.5cm}
+    \end{abstract}
+  \end{@twocolumnfalse}
+]
+
+% =========================================================
+\section{INTRODUCTION}
+% =========================================================
+Medical image analysis sits at the intersection of computer vision and computational geometry. While Convolutional Neural Networks (CNNs) like nnUnet excel at local texture recognition, they often lack a global understanding of \textit{Topology}. For continuous anatomical structures, such as the retinal layers in Optical Coherence Tomography (OCT), the output should ideally be a single connected component. However, in challenging scenarios (e.g., low contrast or noise), CNNs often output "fractured" graphs—collections of disjoint subgraphs—which are mathematically invalid for physical modeling.
+
+From the perspective of \textit{Discrete Mathematics}, a digital image is a Lattice (Grid Graph). The problem of fixing these fractures is not merely about image processing, but about \textit{Graph Connectivity Restoration}. 
+
+This project documents an exploratory journey to solve this problem. We adopt a "Audit-Model-Refine" workflow:
+\begin{enumerate}
+    \item \textbf{Audit:} Using graph traversal algorithms to quantify topological errors across different anatomical classes.
+    \item \textbf{Model:} Formulating the problem using Graph Theory and identifying the limitations of purely local discrete operations (e.g., Morphology).
+    \item \textbf{Refine:} Proposing a novel \textit{Hybrid Discrete-Continuous} algorithm that uses global regression to predict missing edges in the graph, ensuring both topological validity and morphological fidelity.
+\end{enumerate}
+
+% =========================================================
+\section{MATHEMATICAL MODELING}
+% =========================================================
+We formally define the segmentation landscape using discrete structures.
+
+\subsection{The Image Lattice as a Graph}
+Let the binary segmentation mask be a matrix $I \in \{0, 1\}^{H \times W}$. We model this lattice as an undirected graph $G = (V, E)$.
+\begin{itemize}
+    \item \textbf{Vertex Set $V$:} The set of all foreground pixels.
+    $V = \{ p=(x, y) \mid I(p) = 1 \}$.
+    \item \textbf{Edge Set $E$:} Defined by the adjacency relation. We utilize \textbf{8-connectivity} ($N_8$) for the foreground to preserve the continuity of diagonal structures. Two vertices $u, v \in V$ share an edge if:
+    \begin{equation}
+        \| u - v \|_\infty = \max(|x_u - x_v|, |y_u - y_v|) = 1
+    \end{equation}
+\end{itemize}
+
+\subsection{Topological Invariants}
+We assess the structural integrity using Betti numbers. For a 2D complex, the zeroth Betti number $b_0$ represents the count of \textbf{Connected Components}.
+A valid retinal layer segmentation must satisfy the constraint:
+\begin{equation}
+    b_0(G) = 1
+\end{equation}
+Violations where $b_0(G) > 1$ indicate fractures (False Negatives in connectivity), which are the primary focus of this study.
+
+% End of Part 1
+% =========================================================
+\section{METHODOLOGY EVOLUTION}
+% =========================================================
+Our research followed an iterative process. We first identified the target problem through auditing, then progressively refined our algorithms from V1 to V5.
+
+\subsection{Step 0: Topological Auditing}
+Before designing algorithms, we must identify which anatomical structure requires intervention. We performed a \textbf{Topological Audit} on the validation dataset (256 samples) for all 11 segmentation classes.
+
+We defined the "Fragmentation Score" as the expected value of connected components $\mathbb{E}[b_0]$ for each class $C_k$:
+\begin{equation}
+    \text{Frag}(C_k) = \frac{1}{N} \sum_{i=1}^{N} b_0(G_{i, k})
+\end{equation}
+\textbf{Result:} The audit revealed that \textbf{Class 6} (a specific retinal layer) exhibited the highest fragmentation ($\text{Frag} \approx 2.7$), indicating that on average, this layer is broken into nearly 3 pieces per image. Consequently, Class 6 was selected as the target for this project.
+
+\subsection{Phase I: Discrete Graph Pruning (V1)}
+Our first hypothesis was that the smaller disconnected components were merely noise (artifacts).
+\begin{itemize}
+    \item \textbf{Algorithm:} We applied Connected Component Labeling (CCL). Let the set of components be $\{S_1, S_2, \dots, S_m\}$. We retained only the largest component $S_{max}$ and pruned the rest:
+    \begin{equation}
+        V_{refined} = \{ v \in V \mid \text{Label}(v) = \arg\max_j |S_j| \}
+    \end{equation}
+    \item \textbf{Outcome:} As shown in Figure \ref{fig:v1}, this method successfully enforced $b_0=1$. However, it simply deleted the "fractured" limbs (blue and red segments), resulting in a loss of valid anatomical data and a decrease in the Dice score.
+\end{itemize}
+
+\begin{figure}[H]
+    \centering
+    % TODO: Upload a picture showing V1 result (Color labeled components -> Single component)
+    % Name it 'fig_v1.png'
+    \includegraphics[width=0.9\columnwidth]{fig_v1.png}
+    \caption{\textbf{Phase I (V1) Result.} The connectivity analysis (left) shows 3 disjoint components. V1 simply keeps the largest one (center), discarding the left and right segments. ($b_0$ fixed, but data lost).}
+    \label{fig:v1}
+\end{figure}
+
+\subsection{Phase II: Local Morphological Operations (V2/V3)}
+To fix the data loss in V1, we attempted to "bridge" the gaps before pruning using Mathematical Morphology.
+\begin{itemize}
+    \item \textbf{Approach:} We applied a Closing operation ($\phi_B(A) = (A \oplus B) \ominus B$) using both isotropic (Disk) and anisotropic (Rectangle) structuring elements.
+    \item \textbf{Failure Analysis:} Local operators proved insufficient.
+    \begin{enumerate}
+        \item \textbf{Scale Mismatch:} The gaps in Class 6 often exceeded 50 pixels. A kernel large enough to bridge this gap would inevitably merge the layer with adjacent vertical layers, violating anatomical logic.
+        \item \textbf{Shape Mismatch:} Rectangular kernels failed to follow the natural curvature (arc) of the eye, creating "staircase" artifacts.
+    \end{enumerate}
+\end{itemize}
+
+% End of Part 2
+\subsection{Phase III: Hybrid Discrete-Continuous Modeling}
+Recognizing that local discrete operations failed to bridge large gaps, we shifted to a global modeling approach. We hypothesized that the discrete lattice points are samples from an underlying continuous manifold.
+
+\subsubsection{V4: Fixed-Width Polynomial Reconstruction}
+We mapped the set of vertices $V$ to a continuous domain and performed a regression analysis.
+\begin{itemize}
+    \item \textbf{Trajectory Modeling:} We fitted a 2nd-degree polynomial $y = f(x) = ax^2 + bx + c$ to capture the global geometric trend of the retinal layer.
+    \item \textbf{Rasterization:} We discretized $f(x)$ back onto the grid to form a "bridge" of fixed width (3px).
+    \item \textbf{Observation:} Figure \ref{fig:v4} demonstrates that V4 successfully connected the distant components. However, the fixed-width bridge creates an unnatural "bottleneck" (visible in the zoomed region), failing to match the varying thickness of the biological tissue.
+\end{itemize}
+
+\begin{figure}[H]
+    \centering
+    % TODO: Upload V4 result image
+    \includegraphics[width=0.9\columnwidth]{fig_v4.png}
+    \caption{\textbf{Phase III (V4) Result.} Global polynomial regression successfully bridges the gap, but the fixed-width connection (arrow) ignores the natural thickness variation of the tissue.}
+    \label{fig:v4}
+\end{figure}
+
+\subsubsection{V5: Dual-Regression Adaptive Model (Final)}
+To achieve Morphological Fidelity, we proposed the \textbf{Dual-Regression Framework}. We model the retinal layer as a "Tube" defined by a central trajectory and a varying radius.
+
+\begin{enumerate}
+    \item \textbf{Trajectory Regression ($y=f(x)$):} Determines the geometric path.
+    \item \textbf{Caliber Regression ($r=g(x)$):} We compute the Distance Transform map $D$ of the original image. For every foreground pixel $p_i$, $D(p_i)$ represents its local semi-thickness. We fit a second polynomial $g(x)$ to these thickness values.
+    \item \textbf{Global Extrapolation:} We evaluate $f(x)$ and $g(x)$ over the full domain $x \in [0, W]$. This allows us to reconstruct the layer even at the image boundaries (Extrapolation).
+    \item \textbf{Adaptive Rasterization:} The bridge is constructed by drawing discrete circles of radius $g(x)$ at $f(x)$.
+\end{enumerate}
+
+The final graph is constructed via logical disjunction:
+\begin{equation}
+    G_{final} = G_{original} \cup G_{bridge}
+\end{equation}
+As shown in Figure \ref{fig:v5}, V5 perfectly reconstructs the layer with smooth, adaptive thickness.
+
+\begin{figure}[H]
+    \centering
+    % TODO: Upload V5 result image (The best one)
+    \includegraphics[width=0.9\columnwidth]{fig_v5.png}
+    \caption{\textbf{Final (V5) Result.} The Dual-Regression model reconstructs the missing connection with \textbf{adaptive thickness}, seamlessly blending with the original segments. Note the natural tapering at the bridge.}
+    \label{fig:v5}
+\end{figure}
+
+% =========================================================
+\section{EXPERIMENTAL RESULTS}
+% =========================================================
+We evaluated the methods on the Class 6 validation set (256 samples).
+
+\begin{table}[h]
+    \centering
+    \caption{Quantitative Comparison. V5 is the only method that improves both Topology and Dice.}
+    \label{tab:final_results}
+    \resizebox{\columnwidth}{!}{%
+    \begin{tabular}{lccc}
+        \toprule
+        \textbf{Method} & \textbf{Topo Accuracy} & \textbf{Mean Dice} & \textbf{$\Delta$ Dice} \\
+        & ($b_0=1$) & & \\
+        \midrule
+        Baseline (nnUnet) & 67.58\% & 0.2784 & - \\
+        Method V1 (Pruning) & 100.00\% & 0.2765 & -0.0019 \\
+        Method V4 (Fixed) & 100.00\% & 0.2851 & +0.0067 \\
+        \textbf{Method V5 (Adaptive)} & \textbf{100.00\%} & \textbf{0.2922} & \textbf{+0.0138} \\
+        \bottomrule
+    \end{tabular}%
+    }
+\end{table}
+
+The quantitative results (Table \ref{tab:final_results}) confirm our visual observations. While V1 ensures topology at the cost of accuracy, V5 leverages the "Continuous-to-Discrete" mapping to recover lost information, achieving a 1.38\% improvement in Dice score while guaranteeing perfect connectivity.
+
+% =========================================================
+\section{CONCLUSION}
+% =========================================================
+This project demonstrates that rigorous Discrete Mathematics principles, when combined with continuous modeling, provide powerful tools for medical image analysis. We successfully evolved our solution from a simple graph pruning algorithm (V1) to a sophisticated Dual-Regression framework (V5). The final model not only satisfies the topological constraint of connectivity ($b_0=1$) but also respects the morphological fidelity of biological structures.
+
+% =========================================================
+\section{ACKNOWLEDGEMENT}
+% =========================================================
+I would like to express my sincere gratitude to \textbf{Dr. S. Chen} for his Discrete Mathematics lectures. The recent chapters on \textit{Graphs and Trees} provided the essential theoretical framework for this study.
+
+The motivation for this project originated from my recent research internship at the \textbf{iMED research group}. While performing tasks assigned by senior members, specifically utilizing nnUnet for medical image segmentation, I observed a recurrent issue: deep learning models often yield low Dice scores and poor connectivity when segmenting thin anatomical structures (e.g., thin scleral/retinal layers). 
+
+Confronted with these engineering bottlenecks, I was inspired to revisit the problem through the lens of Discrete Mathematics. This project represents my attempt to bridge the gap between data-driven AI and logical graph theory to propose a robust solution.
+
+Finally, I strictly acknowledge the utilization of Generative AI tools during the preparation of this work. These tools were employed to \textbf{refine the academic language} of the report and provide \textbf{auxiliary assistance for code implementation}. The conceptual design, mathematical derivations, and final verification of the results remain the sole work of the author.
+
+% =========================================================
+\section{DATA STATEMENT}
+% =========================================================
+The dataset utilized in this study consists of **Sclera OCT images** provided by the **iMED research group**. 
+
+\textbf{Disclaimer:} These data are authorized strictly for the purpose of this Discrete Mathematics course project only. Any unauthorized reproduction, distribution, external sharing, or commercial use of these images is strictly prohibited to maintain data confidentiality and research integrity.
+
+% =========================================================
+% REFERENCES
+% =========================================================
+\begin{thebibliography}{9}
+
+% [1] 课程教材：体现项目与课程的直接联系
+\bibitem{rosen_textbook}
+K. H. Rosen, \textit{Discrete Mathematics and Its Applications}, 8th ed. McGraw-Hill Education, 2018.
+
+% [2] 理论基础：数字图像中的连通性定义 (Part 1, V1)
+\bibitem{rosenfeld_connectivity}
+A. Rosenfeld, ``Connectivity in Digital Pictures,'' \textit{Journal of the ACM (JACM)}, vol. 17, no. 1, pp. 146-160, 1970.
+
+% [3] 背景模型：nnUnet (Introduction, Baseline)
+\bibitem{nnunet_nature}
+F. Isensee, P. F. Jaeger, S. A. A. Kohl, et al., ``nnU-Net: a self-configuring method for deep learning-based biomedical image segmentation,'' \textit{Nature Methods}, vol. 18, pp. 203–211, 2021.
+
+% [4] 方法论：形态学图像处理 (Part 2, V2/V3)
+\bibitem{soille_morphology}
+P. Soille, \textit{Morphological Image Analysis: Principles and Applications}, 2nd ed. Springer-Verlag Berlin Heidelberg, 2003.
+
+% [5] 方法论：最小二乘法与曲线拟合 (Part 3, V4/V5)
+\bibitem{curve_fitting}
+G. A. F. Seber and A. J. Lee, \textit{Linear Regression Analysis}, 2nd ed. John Wiley \& Sons, 2003.
+
+% [6] 相关研究：医学图像中的拓扑约束 (Discussion)
+% 这篇增加了学术厚度，表明你知道拓扑在医学AI里的前沿应用
+\bibitem{topo_loss}
+J. Clough, et al., ``A Topological Loss Function for Deep-Learning based Image Segmentation using Persistent Homology,'' \textit{IEEE Transactions on Pattern Analysis and Machine Intelligence (TPAMI)}, vol. 44, no. 12, pp. 8766-8778, 2022.
+
+\end{thebibliography}
+
+% =========================================================
+% APPENDIX: CODE IMPLEMENTATIONS
+% =========================================================
+\clearpage
+\onecolumn % Switch to one column layout for better code readability
+\appendix
+\section*{APPENDIX: SOURCE CODE}
+\renewcommand{\thesubsection}{A.\arabic{subsection}}
+
+Here we provide the Python implementations for the Topological Audit and the iterative refinement algorithms (V1 to V5) discussed in the paper. The code relies on \texttt{numpy}, \texttt{opencv-python}, and \texttt{scikit-image}.
+
+% ---------------------------------------------------------
+\subsection{Topological Auditing (Pre-analysis)}
+This script scans the dataset to calculate the fragmentation score $\mathbb{E}[b_0]$ for each class, identifying Class 6 as the target.
+
+\begin{lstlisting}[language=Python, caption=fragmentation\_audit.py]
+def evaluate_fragmentation(pred_dir, max_class_id=11):
+    class_frag = {k: [] for k in range(1, max_class_id)}
+    
+    # Iterate through all prediction files
+    for p_path in tqdm(glob(os.path.join(pred_dir, "*.png"))):
+        pred = cv2.imread(p_path, 0)
+        
+        # Check each anatomical layer
+        for cid in range(1, max_class_id):
+            binary_layer = (pred == cid).astype(np.uint8)
+            if np.sum(binary_layer) == 0: continue
+                
+            # Calculate b0 (Connected Components)
+            # Connectivity=2 implies 8-neighbors
+            _, num = measure.label(binary_layer, return_num=True, connectivity=2)
+            class_frag[cid].append(num)
+
+    # Output Statistics
+    for cid in range(1, max_class_id):
+        avg_frag = np.mean(class_frag[cid])
+        print(f"Class {cid} | Avg b0: {avg_frag:.4f}")
+\end{lstlisting}
+
+% ---------------------------------------------------------
+\subsection{Method V1: Discrete Graph Pruning}
+The baseline graph-theoretic approach that strictly enforces $b_0=1$ by retaining only the largest subgraph.
+
+\begin{lstlisting}[language=Python, caption=topo\_analysis\_v1.py]
+def refine_v1(binary_mask):
+    """
+    Retains the Largest Connected Component (LCC).
+    """
+    label_img, num = measure.label(binary_mask, connectivity=2)
+    if num <= 1: return binary_mask
+
+    # Calculate properties (Area) for each component
+    props = measure.regionprops(label_img)
+    if not props: return binary_mask
+
+    # Find component with max area
+    max_prop = max(props, key=lambda x: x.area)
+    
+    # Reconstruct mask
+    return (label_img == max_prop.label).astype(np.uint8)
+\end{lstlisting}
+
+% ---------------------------------------------------------
+\subsection{Method V2: Isotropic Morphological Closing}
+Attempting to bridge gaps using a disk structuring element.
+
+\begin{lstlisting}[language=Python, caption=topo\_analysis\_v2.py]
+from skimage.morphology import disk, binary_closing
+
+def refine_v2(binary_mask, radius=10):
+    """
+    Applies isotropic closing before graph pruning.
+    """
+    # Structuring Element: Disk of radius r
+    selem = disk(radius)
+    
+    # Morphological Closing: Dilation -> Erosion
+    closed_mask = binary_closing(binary_mask, selem)
+    
+    # Then apply V1 pruning on the closed mask
+    return refine_v1(closed_mask)
+\end{lstlisting}
+
+% ---------------------------------------------------------
+\subsection{Method V3: Anisotropic Morphological Closing}
+Attempting to bridge horizontal gaps using a wide rectangular kernel.
+
+\begin{lstlisting}[language=Python, caption=topo\_analysis\_v3.py]
+from skimage.morphology import rectangle
+
+def refine_v3(binary_mask):
+    """
+    Applies anisotropic closing (Wide Rectangle).
+    Targeting horizontal fractures in retinal layers.
+    """
+    # Width=150 (Bridge gaps), Height=15 (Tolerance)
+    selem = rectangle(15, 150)
+    closed_mask = binary_closing(binary_mask, selem)
+    return refine_v1(closed_mask)
+\end{lstlisting}
+
+% ---------------------------------------------------------
+\subsection{Method V4: Global Polynomial Regression (Fixed Width)}
+Global trend modeling with extrapolation, but lacking thickness adaptation.
+
+\begin{lstlisting}[language=Python, caption=topo\_analysis\_v4.py]
+def refine_v4(binary_mask, degree=2, thickness=3):
+    h, w = binary_mask.shape
+    y, x = np.where(binary_mask > 0)
+    
+    if len(x) < 10: return binary_mask
+
+    # 1. Fit Trajectory: y = f(x)
+    coeffs = np.polyfit(x, y, degree)
+    poly_func = np.poly1d(coeffs)
+
+    # 2. Global Extrapolation (0 to Width)
+    x_new = np.arange(0, w)
+    y_new = poly_func(x_new).astype(int)
+
+    # 3. Rasterization (Fixed Thickness)
+    bridge = np.zeros_like(binary_mask)
+    valid = (y_new >= 0) & (y_new < h)
+    pts = np.column_stack((x_new[valid], y_new[valid]))
+    cv2.polylines(bridge, [pts], False, 1, thickness)
+
+    # 4. Fusion
+    return refine_v1(np.logical_or(binary_mask, bridge))
+\end{lstlisting}
+
+% ---------------------------------------------------------
+\subsection{Method V5: Dual-Regression Hybrid Model (Final)}
+The proposed method combining trajectory regression and caliber (thickness) regression.
+
+\begin{lstlisting}[language=Python, caption=topo\_analysis\_v5.py]
+def refine_v5_adaptive(binary_mask, degree=2):
+    h, w = binary_mask.shape
+    y, x = np.where(binary_mask > 0)
+    if len(x) < 10: return binary_mask
+
+    # --- Step A: Trajectory Regression y = f(x) ---
+    coeffs_y = np.polyfit(x, y, degree)
+    poly_y = np.poly1d(coeffs_y)
+
+    # --- Step B: Caliber Regression r = g(x) ---
+    # 1. Compute Distance Transform (Local Thickness)
+    dist_map = cv2.distanceTransform(binary_mask, cv2.DIST_L2, 5)
+    r_vals = dist_map[y, x]
+    
+    # 2. Fit Thickness Curve
+    coeffs_r = np.polyfit(x, r_vals, degree)
+    poly_r = np.poly1d(coeffs_r)
+
+    # --- Step C: Adaptive Rasterization ---
+    x_new = np.arange(0, w)
+    y_pred = poly_y(x_new).astype(int)
+    r_pred = poly_r(x_new)
+    r_pred = np.clip(r_pred, 1.0, 50.0) # Safety clip
+
+    bridge = np.zeros_like(binary_mask)
+    for i, xi in enumerate(x_new):
+        if 0 <= y_pred[i] < h:
+            # Draw circle with predicted radius g(x)
+            radius = int(round(r_pred[i]))
+            cv2.circle(bridge, (xi, y_pred[i]), radius, 1, -1)
+
+    # --- Step D: Fusion & Pruning ---
+    merged = np.logical_or(binary_mask, bridge).astype(np.uint8)
+    return refine_v1(merged)
+\end{lstlisting}
+
+\end{document}
